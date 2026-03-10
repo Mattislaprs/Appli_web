@@ -105,6 +105,9 @@ def convert_coords(x, y, source_scale: str):
 
     if source_scale == "120 x 120":
         return x, y * 60 / 120
+    
+    if source_scale == "60 x 120":
+        return x * 120 / 60, y * 60 / 120
 
     return x, y
 
@@ -386,7 +389,7 @@ with st.sidebar:
 
     source_scale = st.radio(
         "Échelle des coordonnées source",
-        ["100 x 100", "120 x 120", "120 x 60"],
+        ["100 x 100", "120 x 120", "60 x 120", "120 x 60"],
         index=0,
         help="Choisis l'échelle d'origine des coordonnées. Elles seront converties vers un terrain 120 x 60."
     )
@@ -395,6 +398,14 @@ with st.sidebar:
         "Forcer les joueurs hors terrain à apparaître sur le bord",
         value=True
     )
+    
+    point_size = st.slider(
+    "Taille des joueurs",
+    min_value=50,
+    max_value=400,
+    value=180,
+    step=10
+)
 
     issue_options = get_select_filter_options(df, "Issue")
     selected_issue = st.selectbox("Issue", issue_options)
@@ -484,6 +495,7 @@ with col1:
         selected_players=selected_players,
         clamp_outside=clamp_outside,
     )
+    
     st.pyplot(fig, clear_figure=True)
 
 with col2:
