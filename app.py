@@ -224,11 +224,21 @@ if uploaded_file is None:
     st.stop()
 
 # Lecture du fichier
+# Lecture du fichier (détection automatique du séparateur ";" ou ",")
 try:
-    df = pd.read_csv(uploaded_file, sep=";")
-except Exception:
     uploaded_file.seek(0)
-    df = pd.read_csv(uploaded_file)
+    df = pd.read_csv(uploaded_file, sep=None, engine="python")
+except Exception as e:
+    uploaded_file.seek(0)
+    try:
+        df = pd.read_csv(uploaded_file, sep=";")
+    except Exception:
+        uploaded_file.seek(0)
+        try:
+            df = pd.read_csv(uploaded_file, sep=",")
+        except Exception:
+            st.error(f"Impossible de lire le fichier CSV : {e}")
+            st.stop()
 
 df = normalize_columns(df)
 df = df.reset_index(drop=True)
