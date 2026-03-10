@@ -394,7 +394,6 @@ def overlay_average_positions(
 
         color = ROLE_COLORS.get(label, "white")
 
-        # disque moyen plus large et transparent
         ax.scatter(
             x,
             y,
@@ -406,7 +405,6 @@ def overlay_average_positions(
             zorder=2,
         )
 
-        # centre blanc pour repère
         ax.scatter(
             x,
             y,
@@ -499,9 +497,10 @@ with st.sidebar:
         step=10,
     )
 
-    show_average = st.checkbox(
-        "Afficher les positions moyennes",
-        value=False,
+    display_mode = st.radio(
+        "Mode d'affichage",
+        ["Situation actuelle", "Situation + moyenne", "Moyenne seule"],
+        index=0,
     )
 
     issue_options = get_select_filter_options(df, "Issue")
@@ -590,19 +589,30 @@ selected_index = int(selected_option.split(" - ")[0])
 col1, col2 = st.columns([2.1, 1])
 
 with col1:
-    fig, plotted_df, debug_df = plot_situation(
-        df=df,
-        row_index=selected_index,
-        player_map=player_map,
-        source_scale=source_scale,
-        selected_players=selected_players,
-        clamp_outside=clamp_outside,
-        point_size=point_size,
-    )
-
     average_df = pd.DataFrame()
 
-    if show_average:
+    if display_mode == "Situation actuelle":
+        fig, plotted_df, debug_df = plot_situation(
+            df=df,
+            row_index=selected_index,
+            player_map=player_map,
+            source_scale=source_scale,
+            selected_players=selected_players,
+            clamp_outside=clamp_outside,
+            point_size=point_size,
+        )
+
+    elif display_mode == "Situation + moyenne":
+        fig, plotted_df, debug_df = plot_situation(
+            df=df,
+            row_index=selected_index,
+            player_map=player_map,
+            source_scale=source_scale,
+            selected_players=selected_players,
+            clamp_outside=clamp_outside,
+            point_size=point_size,
+        )
+
         average_df = overlay_average_positions(
             ax=fig.axes[0],
             df_avg=filtered_df,
@@ -611,6 +621,30 @@ with col1:
             selected_players=selected_players,
             clamp_outside=clamp_outside,
             point_size=point_size,
+        )
+
+    else:  # Moyenne seule
+        fig, ax = plt.subplots(figsize=(12, 6))
+        draw_pitch(ax)
+
+        plotted_df = pd.DataFrame()
+        debug_df = pd.DataFrame()
+
+        average_df = overlay_average_positions(
+            ax=ax,
+            df_avg=filtered_df,
+            player_map=player_map,
+            source_scale=source_scale,
+            selected_players=selected_players,
+            clamp_outside=clamp_outside,
+            point_size=point_size,
+        )
+
+        ax.set_title(
+            "Positions moyennes",
+            color="white",
+            fontsize=14,
+            weight="bold",
         )
 
     st.pyplot(fig, clear_figure=True)
@@ -637,28 +671,30 @@ with col2:
     if "Rapport numerique" in df.columns:
         st.write(f"**Rapport numerique :** {current_line.get('Rapport numerique', 'NA')}")
 
-    if show_average:
-        st.write("**Mode :** Situation individuelle + positions moyennes")
+    st.write(f"**Mode :** {display_mode}")
+
+    if display_mode == "Moyenne seule":
+        st.write(f"**Joueurs moyens affichés :** {len(average_df)}")
     else:
-        st.write("**Mode :** Situation individuelle")
+        st.write(f"**Joueurs affichés :** {len(plotted_df)}")
 
-    st.write(f"**Joueurs affichés :** {len(plotted_df)}")
+    if display_mode in ["Situation actuelle", "Situation + moyenne"]:
+        with st.expander("Coordonnées de la situation affichée", expanded=True):
+            if plotted_df.empty:
+                st.write("Aucun joueur affiché.")
+            else:
+                st.dataframe(plotted_df, use_container_width=True)
 
-    with st.expander("Coordonnées de la situation affichée", expanded=True):
-        if plotted_df.empty:
-            st.write("Aucun joueur affiché.")
-        else:
-            st.dataframe(plotted_df, use_container_width=True)
-
-    if show_average:
-        with st.expander("Positions moyennes superposées", expanded=True):
+    if display_mode in ["Situation + moyenne", "Moyenne seule"]:
+        with st.expander("Positions moyennes", expanded=True):
             if average_df.empty:
                 st.write("Aucune moyenne affichée.")
             else:
                 st.dataframe(average_df, use_container_width=True)
 
-    with st.expander("Diagnostic complet"):
-        st.dataframe(debug_df, use_container_width=True)
+    if display_mode != "Moyenne seule":
+        with st.expander("Diagnostic complet"):
+            st.dataframe(debug_df, use_container_width=True)
 
 st.divider()
 
