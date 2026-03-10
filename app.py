@@ -12,13 +12,47 @@ st.set_page_config(page_title="Analyse tactique", layout="wide")
 # Utilitaires
 # =========================
 def normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
-    """Uniformise quelques noms de colonnes fréquents."""
+    """Uniformise les noms de colonnes fréquents."""
     renamed = {}
     for col in df.columns:
-        if col == "ROW":
+        col_clean = str(col).strip()
+        col_lower = col_clean.lower()
+
+        if col_lower == "row":
             renamed[col] = "Row"
-    if renamed:
-        df = df.rename(columns=renamed)
+        elif col_lower == "issue":
+            renamed[col] = "Issue"
+        elif col_lower == "joueur":
+            renamed[col] = "Joueur"
+        elif col_lower == "situation":
+            renamed[col] = "Situation"
+        elif col_lower == "choix":
+            renamed[col] = "Choix"
+        elif col_lower == "choix duel":
+            renamed[col] = "Choix duel"
+        elif col_lower == "hauteur de bloc":
+            renamed[col] = "Hauteur de bloc"
+        elif col_lower == "phase de jeu":
+            renamed[col] = "Phase de jeu"
+        elif col_lower == "rapport numerique":
+            renamed[col] = "Rapport numerique"
+        else:
+            renamed[col] = col_clean
+
+    df = df.rename(columns=renamed)
+    return df
+
+
+def ensure_row_column(df: pd.DataFrame) -> pd.DataFrame:
+    """Crée une colonne Row si elle n'existe pas encore."""
+    if "Row" in df.columns:
+        return df
+
+    if "Situation" in df.columns:
+        df["Row"] = df["Situation"].astype(str)
+        return df
+
+    df["Row"] = [f"Situation {i}" for i in range(len(df))]
     return df
 
 
@@ -33,8 +67,6 @@ def to_float(value):
     if value == "":
         return None
 
-    # Cas fréquent : '26,2'
-    # Cas ambigu : '117,101' -> on l'interprète comme 117.101
     value = value.replace(" ", "").replace(",", ".")
 
     try:
@@ -48,15 +80,12 @@ def convert_coords(x, y, source_scale: str):
     if x is None or y is None:
         return None, None
 
-    # données normalisées
     if source_scale == "100 x 100":
         return x * 120 / 100, y * 60 / 100
 
-    # données 120 x 120 (souvent export tracking)
     if source_scale == "120 x 120":
         return x, y * 60 / 120
 
-    # déjà au bon format
     return x, y
 
 
@@ -69,36 +98,28 @@ def clamp_coords(x, y):
 
 def draw_pitch(ax):
     """Dessine un terrain 120 x 60."""
-    # Fond
     ax.set_facecolor("#1f7a3d")
 
-    # Contours
     ax.plot([0, 120], [0, 0], color="white", lw=2)
     ax.plot([0, 120], [60, 60], color="white", lw=2)
     ax.plot([0, 0], [0, 60], color="white", lw=2)
     ax.plot([120, 120], [0, 60], color="white", lw=2)
 
-    # Ligne médiane
     ax.plot([60, 60], [0, 60], color="white", lw=2)
 
-    # Cercle central
     centre = Circle((60, 30), 9.15, fill=False, color="white", lw=2)
     ax.add_patch(centre)
     ax.scatter(60, 30, color="white", s=15)
 
-    # Surfaces de réparation
     ax.add_patch(Rectangle((0, 18), 18, 24, fill=False, edgecolor="white", lw=2))
     ax.add_patch(Rectangle((102, 18), 18, 24, fill=False, edgecolor="white", lw=2))
 
-    # Surfaces de but
     ax.add_patch(Rectangle((0, 24), 6, 12, fill=False, edgecolor="white", lw=2))
     ax.add_patch(Rectangle((114, 24), 6, 12, fill=False, edgecolor="white", lw=2))
 
-    # Points de penalty
     ax.scatter(12, 30, color="white", s=15)
     ax.scatter(108, 30, color="white", s=15)
 
-    # Arcs de penalty
     ax.add_patch(Arc((12, 30), 18.3, 18.3, angle=0, theta1=310, theta2=50, color="white", lw=2))
     ax.add_patch(Arc((108, 30), 18.3, 18.3, angle=0, theta1=130, theta2=230, color="white", lw=2))
 
@@ -120,6 +141,19 @@ def build_player_map(df: pd.DataFrame):
                 players[suffix.upper()] = (col, y_col)
     return dict(sorted(players.items()))
 
+# =========================
+# Couleurs par rôle
+# =========================
+ROLE_COLORS = {
+    "ADV": "red",
+    "DLADV": "red",
+    "BAL": "black",
+    "DC": "blue",
+    "MDC": "blue",
+    "MC": "blue",
+    "AL": "blue",
+    "LAT": "yellow"
+}
 
 def format_option(row) -> str:
     issue = str(row.get("Issue", "Sans Issue")) if not pd.isna(row.get("Issue", None)) else "Sans Issue"
@@ -142,14 +176,37 @@ def get_player_name_for_label(line: pd.Series, label: str):
         if col in line.index and pd.notna(line[col]) and str(line[col]).strip() != "":
             return str(line[col])
 
-    # Cas demandé : utiliser la colonne 'Joueur' pour le point LAT
     if label == "LAT" and "Joueur" in line.index and pd.notna(line["Joueur"]) and str(line["Joueur"]).strip() != "":
         return str(line["Joueur"])
 
     return None
 
+def get_select_filter_options(df: pd.DataFrame, column_name: str, all_label: str = "Toutes"):
 
-def plot_situation(df: pd.DataFrame, row_index: int, player_map: dict, source_scale: str, selected_players: list[str], clamp_outside: bool):
+    if column_name not in df.columns:
+        return [all_label]
+
+    values = (
+        df[column_name]
+        .astype(str)
+        .str.strip()
+        .replace("", pd.NA)
+        .dropna()
+    )
+
+    unique_values = sorted(values.unique().tolist())
+
+    return [all_label] + unique_values
+
+
+def plot_situation(
+    df: pd.DataFrame,
+    row_index: int,
+    player_map: dict,
+    source_scale: str,
+    selected_players: list[str],
+    clamp_outside: bool
+):
     line = df.loc[row_index]
 
     fig, ax = plt.subplots(figsize=(12, 6))
@@ -171,14 +228,26 @@ def plot_situation(df: pd.DataFrame, row_index: int, player_map: dict, source_sc
         status = "ok"
         if x_num is None or y_num is None:
             status = "valeur manquante / non convertible"
-            debug_rows.append({"Joueur tactique": label, "Joueur réel": player_name, "X brut": x_raw, "Y brut": y_raw, "Statut": status})
+            debug_rows.append({
+                "Joueur tactique": label,
+                "Joueur réel": player_name,
+                "X brut": x_raw,
+                "Y brut": y_raw,
+                "Statut": status
+            })
             continue
 
         x, y = convert_coords(x_num, y_num, source_scale)
 
         if x is None or y is None:
             status = "conversion impossible"
-            debug_rows.append({"Joueur tactique": label, "Joueur réel": player_name, "X brut": x_raw, "Y brut": y_raw, "Statut": status})
+            debug_rows.append({
+                "Joueur tactique": label,
+                "Joueur réel": player_name,
+                "X brut": x_raw,
+                "Y brut": y_raw,
+                "Statut": status
+            })
             continue
 
         if not (0 <= x <= 120 and 0 <= y <= 60):
@@ -187,12 +256,28 @@ def plot_situation(df: pd.DataFrame, row_index: int, player_map: dict, source_sc
                 status = "hors terrain puis recalé"
             else:
                 status = f"hors terrain ({x:.2f}, {y:.2f})"
-                debug_rows.append({"Joueur tactique": label, "Joueur réel": player_name, "X brut": x_raw, "Y brut": y_raw, "Statut": status})
+                debug_rows.append({
+                    "Joueur tactique": label,
+                    "Joueur réel": player_name,
+                    "X brut": x_raw,
+                    "Y brut": y_raw,
+                    "Statut": status
+                })
                 continue
 
-        ax.scatter(x, y, s=180, edgecolors="black", linewidths=1.2)
+        color = ROLE_COLORS.get(label, "white")
+        ax.scatter(
+            x,
+            y,
+            s=200,
+            color=color,
+            edgecolors="black",
+            linewidths=2,
+            zorder=3
+            )
         display_text = label if player_name is None else f"{label} - {player_name}"
         ax.text(x + 1.2, y + 0.6, display_text, color="white", fontsize=10, weight="bold")
+
         plotted.append({
             "Joueur tactique": label,
             "Joueur réel": player_name,
@@ -202,11 +287,23 @@ def plot_situation(df: pd.DataFrame, row_index: int, player_map: dict, source_sc
             "Y brut": y_raw,
             "Statut": status,
         })
-        debug_rows.append({"Joueur tactique": label, "Joueur réel": player_name, "X brut": x_raw, "Y brut": y_raw, "Statut": status})
+
+        debug_rows.append({
+            "Joueur tactique": label,
+            "Joueur réel": player_name,
+            "X brut": x_raw,
+            "Y brut": y_raw,
+            "Statut": status
+        })
 
     title_issue = line.get("Issue", "Sans Issue") if "Issue" in df.columns else "Sans Issue"
     title_row = line.get("Row", "Sans Situation") if "Row" in df.columns else "Sans Situation"
-    ax.set_title(f"Issue : {title_issue} | Situation : {title_row} | Ligne : {row_index}", color="white", fontsize=14, weight="bold")
+    ax.set_title(
+        f"Issue : {title_issue} | Situation : {title_row} | Ligne : {row_index}",
+        color="white",
+        fontsize=14,
+        weight="bold"
+    )
 
     return fig, pd.DataFrame(plotted), pd.DataFrame(debug_rows)
 
@@ -215,7 +312,7 @@ def plot_situation(df: pd.DataFrame, row_index: int, player_map: dict, source_sc
 # Interface
 # =========================
 st.title("Mini appli d'analyse tactique")
-st.caption("Filtres par Issue, Joueur et Situation, avec affichage sur terrain 120 x 60.")
+st.caption("Filtres par Issue, Joueur, Situation, Choix, Choix duel, Hauteur de bloc, Phase de jeu et Rapport numerique.")
 
 uploaded_file = st.file_uploader("Dépose ton CSV", type=["csv"])
 
@@ -223,8 +320,7 @@ if uploaded_file is None:
     st.info("Charge un CSV pour commencer.")
     st.stop()
 
-# Lecture du fichier
-# Lecture du fichier (détection automatique du séparateur ";" ou ",")
+# Lecture du fichier (détection automatique du séparateur ; ou ,)
 try:
     uploaded_file.seek(0)
     df = pd.read_csv(uploaded_file, sep=None, engine="python")
@@ -241,11 +337,8 @@ except Exception as e:
             st.stop()
 
 df = normalize_columns(df)
+df = ensure_row_column(df)
 df = df.reset_index(drop=True)
-
-if "Row" not in df.columns:
-    st.error("La colonne 'Row' est introuvable dans le fichier. Vérifie le CSV.")
-    st.stop()
 
 player_map = build_player_map(df)
 
@@ -268,25 +361,32 @@ with st.sidebar:
         value=True
     )
 
-    if "Issue" in df.columns:
-        issue_options = ["Toutes"] + sorted(df["Issue"].dropna().astype(str).unique().tolist())
-        selected_issue = st.selectbox("Issue", issue_options)
-    else:
-        selected_issue = "Toutes"
+    issue_options = get_select_filter_options(df, "Issue")
+    selected_issue = st.selectbox("Issue", issue_options)
 
-    # Filtre par joueur réel (ex: colonne 'Joueur')
     if "Joueur" in df.columns:
-        real_player_options = ["Tous"] + sorted(df["Joueur"].dropna().astype(str).unique().tolist())
+        real_player_options = ["Tous"] + sorted(df["Joueur"].dropna().astype(str).str.strip().replace("", pd.NA).dropna().unique().tolist())
         selected_real_player = st.selectbox("Joueur", real_player_options)
     else:
         selected_real_player = "Tous"
 
-    # Nouveau filtre par colonne Situation
-    if "Situation" in df.columns:
-        situation_options = ["Toutes"] + sorted(df["Situation"].dropna().astype(str).unique().tolist())
-        selected_situation_filter = st.selectbox("Situation", situation_options)
-    else:
-        selected_situation_filter = "Toutes"
+    situation_options = get_select_filter_options(df, "Situation")
+    selected_situation_filter = st.selectbox("Situation", situation_options)
+
+    choix_options = get_select_filter_options(df, "Choix")
+    selected_choix = st.selectbox("Choix", choix_options)
+
+    choix_duel_options = get_select_filter_options(df, "Choix duel")
+    selected_choix_duel = st.selectbox("Choix duel", choix_duel_options)
+
+    hauteur_bloc_options = get_select_filter_options(df, "Hauteur de bloc")
+    selected_hauteur_bloc = st.selectbox("Hauteur de bloc", hauteur_bloc_options)
+
+    phase_jeu_options = get_select_filter_options(df, "Phase de jeu")
+    selected_phase_jeu = st.selectbox("Phase de jeu", phase_jeu_options)
+
+    rapport_numerique_options = get_select_filter_options(df, "Rapport numerique")
+    selected_rapport_numerique = st.selectbox("Rapport numerique", rapport_numerique_options)
 
     available_players = list(player_map.keys())
     selected_players = st.multiselect(
@@ -295,17 +395,39 @@ with st.sidebar:
         default=available_players
     )
 
-# Filtre par Issue
+# =========================
+# Filtrage
+# =========================
 filtered_df = df.copy()
-if selected_issue != "Toutes":
-    filtered_df = filtered_df[filtered_df["Issue"].astype(str) == selected_issue].copy()
+
+if selected_issue != "Toutes" and "Issue" in filtered_df.columns:
+    filtered_df = filtered_df[filtered_df["Issue"].astype(str).str.strip() == selected_issue].copy()
 
 if selected_real_player != "Tous" and "Joueur" in filtered_df.columns:
-    filtered_df = filtered_df[filtered_df["Joueur"].astype(str) == selected_real_player].copy()
+    filtered_df = filtered_df[filtered_df["Joueur"].astype(str).str.strip() == selected_real_player].copy()
 
-# Filtre Situation
-if 'selected_situation_filter' in locals() and selected_situation_filter != "Toutes" and "Situation" in filtered_df.columns:
-    filtered_df = filtered_df[filtered_df["Situation"].astype(str) == selected_situation_filter].copy()
+if selected_situation_filter != "Toutes" and "Situation" in filtered_df.columns:
+    filtered_df = filtered_df[filtered_df["Situation"].astype(str).str.strip() == selected_situation_filter].copy()
+
+if selected_choix != "Toutes" and "Choix" in filtered_df.columns:
+    filtered_df = filtered_df[filtered_df["Choix"].astype(str).str.strip() == selected_choix].copy()
+
+if selected_choix_duel != "Toutes" and "Choix duel" in filtered_df.columns:
+    filtered_df = filtered_df[filtered_df["Choix duel"].astype(str).str.strip() == selected_choix_duel].copy()
+
+if selected_hauteur_bloc != "Toutes" and "Hauteur de bloc" in filtered_df.columns:
+    filtered_df = filtered_df[filtered_df["Hauteur de bloc"].astype(str).str.strip() == selected_hauteur_bloc].copy()
+
+if selected_phase_jeu != "Toutes" and "Phase de jeu" in filtered_df.columns:
+    filtered_df = filtered_df[filtered_df["Phase de jeu"].astype(str).str.strip() == selected_phase_jeu].copy()
+
+if selected_rapport_numerique != "Toutes" and "Rapport numerique" in filtered_df.columns:
+    filtered_df = filtered_df[
+        filtered_df["Rapport numerique"]
+        .astype(str)
+        .str.strip()
+        == selected_rapport_numerique
+    ].copy()
 
 if filtered_df.empty:
     st.warning("Aucune ligne ne correspond au filtre choisi.")
@@ -336,6 +458,18 @@ with col2:
     st.write(f"**Situation :** {current_line.get('Row', 'NA')}")
     if "Issue" in df.columns:
         st.write(f"**Issue :** {current_line.get('Issue', 'NA')}")
+    if "Joueur" in df.columns:
+        st.write(f"**Joueur :** {current_line.get('Joueur', 'NA')}")
+    if "Choix" in df.columns:
+        st.write(f"**Choix :** {current_line.get('Choix', 'NA')}")
+    if "Choix duel" in df.columns:
+        st.write(f"**Choix duel :** {current_line.get('Choix duel', 'NA')}")
+    if "Hauteur de bloc" in df.columns:
+        st.write(f"**Hauteur de bloc :** {current_line.get('Hauteur de bloc', 'NA')}")
+    if "Phase de jeu" in df.columns:
+        st.write(f"**Phase de jeu :** {current_line.get('Phase de jeu', 'NA')}")
+    if "Rapport numerique" in df.columns:
+        st.write(f"**Rapport numerique :** {current_line.get('Rapport numerique', 'NA')}")
     st.write(f"**Joueurs affichés :** {len(plotted_df)}")
 
     with st.expander("Coordonnées affichées", expanded=True):
