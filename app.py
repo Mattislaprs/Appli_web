@@ -3,6 +3,7 @@ import math
 import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.patches import Arc, Circle, Rectangle
+import unicodedata
 import streamlit as st
 
 st.set_page_config(page_title="Analyse tactique", layout="wide")
@@ -13,35 +14,54 @@ st.set_page_config(page_title="Analyse tactique", layout="wide")
 # =========================
 def normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
     """Uniformise les noms de colonnes fréquents."""
+    
     renamed = {}
+
     for col in df.columns:
+
         col_clean = str(col).strip()
-        col_lower = col_clean.lower()
+
+        # enlever accents
+        col_no_accents = ''.join(
+            c for c in unicodedata.normalize('NFD', col_clean)
+            if unicodedata.category(c) != 'Mn'
+        )
+
+        col_lower = col_no_accents.lower()
 
         if col_lower == "row":
             renamed[col] = "Row"
+
         elif col_lower == "issue":
             renamed[col] = "Issue"
+
         elif col_lower == "joueur":
             renamed[col] = "Joueur"
+
         elif col_lower == "situation":
             renamed[col] = "Situation"
+
         elif col_lower == "choix":
             renamed[col] = "Choix"
+
         elif col_lower == "choix duel":
             renamed[col] = "Choix duel"
+
         elif col_lower == "hauteur de bloc":
             renamed[col] = "Hauteur de bloc"
+
         elif col_lower == "phase de jeu":
             renamed[col] = "Phase de jeu"
+
         elif col_lower == "rapport numerique":
             renamed[col] = "Rapport numerique"
+
         else:
             renamed[col] = col_clean
 
     df = df.rename(columns=renamed)
-    return df
 
+    return df
 
 def ensure_row_column(df: pd.DataFrame) -> pd.DataFrame:
     """Crée une colonne Row si elle n'existe pas encore."""
@@ -132,21 +152,36 @@ def draw_pitch(ax):
 
 def build_player_map(df: pd.DataFrame):
     """Détecte automatiquement les paires X_/Y_ et crée un mapping joueur -> colonnes."""
+    
     players = {}
+    adv_count = 0
+
     for col in df.columns:
+
         if col.startswith("X_"):
+
             suffix = col[2:]
             y_col = f"Y_{suffix}"
+
             if y_col in df.columns:
-                players[suffix.upper()] = (col, y_col)
+
+                label = suffix.upper()
+
+                # gestion ADV / DLADV
+                if label in ["ADV", "DLADV"]:
+                    adv_count += 1
+                    label = f"ADV{adv_count}"
+
+                players[label] = (col, y_col)
+
     return dict(sorted(players.items()))
 
 # =========================
 # Couleurs par rôle
 # =========================
 ROLE_COLORS = {
-    "ADV": "red",
-    "DLADV": "red",
+    "ADV1": "red",
+    "ADV2": "red",
     "BAL": "white",
     "DC": "blue",
     "MDC": "blue",
