@@ -1,5 +1,3 @@
-import io
-import math
 import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.patches import Arc, Circle, Rectangle
@@ -14,54 +12,41 @@ st.set_page_config(page_title="Analyse tactique", layout="wide")
 # =========================
 def normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
     """Uniformise les noms de colonnes fréquents."""
-    
     renamed = {}
 
     for col in df.columns:
-
         col_clean = str(col).strip()
 
-        # enlever accents
         col_no_accents = ''.join(
-            c for c in unicodedata.normalize('NFD', col_clean)
-            if unicodedata.category(c) != 'Mn'
+            c for c in unicodedata.normalize("NFD", col_clean)
+            if unicodedata.category(c) != "Mn"
         )
 
         col_lower = col_no_accents.lower()
 
         if col_lower == "row":
             renamed[col] = "Row"
-
         elif col_lower == "issue":
             renamed[col] = "Issue"
-
         elif col_lower == "joueur":
             renamed[col] = "Joueur"
-
         elif col_lower == "situation":
             renamed[col] = "Situation"
-
         elif col_lower == "choix":
             renamed[col] = "Choix"
-
         elif col_lower == "choix duel":
             renamed[col] = "Choix duel"
-
         elif col_lower == "hauteur de bloc":
             renamed[col] = "Hauteur de bloc"
-
         elif col_lower == "phase de jeu":
             renamed[col] = "Phase de jeu"
-
         elif col_lower == "rapport numerique":
             renamed[col] = "Rapport numerique"
-
         else:
             renamed[col] = col_clean
 
-    df = df.rename(columns=renamed)
+    return df.rename(columns=renamed)
 
-    return df
 
 def ensure_row_column(df: pd.DataFrame) -> pd.DataFrame:
     """Crée une colonne Row si elle n'existe pas encore."""
@@ -77,9 +62,10 @@ def ensure_row_column(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def to_float(value):
-    """Convertit proprement une valeur en float, y compris avec virgule décimale."""
+    """Convertit une valeur en float, y compris avec virgule décimale."""
     if pd.isna(value):
         return None
+
     if isinstance(value, (int, float)):
         return float(value)
 
@@ -105,15 +91,16 @@ def convert_coords(x, y, source_scale: str):
 
     if source_scale == "120 x 120":
         return x, y * 60 / 120
-    
+
     if source_scale == "60 x 120":
         return x * 120 / 60, y * 60 / 120
 
+    # 120 x 60
     return x, y
 
 
 def clamp_coords(x, y):
-    """Ramène un point à l'intérieur du terrain si nécessaire."""
+    """Ramène un point à l'intérieur du terrain."""
     x = max(0, min(120, x))
     y = max(0, min(60, y))
     return x, y
@@ -155,22 +142,17 @@ def draw_pitch(ax):
 
 def build_player_map(df: pd.DataFrame):
     """Détecte automatiquement les paires X_/Y_ et crée un mapping joueur -> colonnes."""
-    
     players = {}
     adv_count = 0
 
     for col in df.columns:
-
         if col.startswith("X_"):
-
             suffix = col[2:]
             y_col = f"Y_{suffix}"
 
             if y_col in df.columns:
-
                 label = suffix.upper()
 
-                # gestion ADV / DLADV
                 if label in ["ADV", "DLADV"]:
                     adv_count += 1
                     label = f"ADV{adv_count}"
@@ -179,9 +161,7 @@ def build_player_map(df: pd.DataFrame):
 
     return dict(sorted(players.items()))
 
-# =========================
-# Couleurs par rôle
-# =========================
+
 ROLE_COLORS = {
     "ADV1": "red",
     "ADV2": "red",
@@ -192,6 +172,7 @@ ROLE_COLORS = {
     "AL": "blue",
     "LAT": "yellow"
 }
+
 
 def format_option(row) -> str:
     issue = str(row.get("Issue", "Sans Issue")) if not pd.isna(row.get("Issue", None)) else "Sans Issue"
@@ -219,8 +200,8 @@ def get_player_name_for_label(line: pd.Series, label: str):
 
     return None
 
-def get_select_filter_options(df: pd.DataFrame, column_name: str, all_label: str = "Toutes"):
 
+def get_select_filter_options(df: pd.DataFrame, column_name: str, all_label: str = "Toutes"):
     if column_name not in df.columns:
         return [all_label]
 
@@ -233,7 +214,6 @@ def get_select_filter_options(df: pd.DataFrame, column_name: str, all_label: str
     )
 
     unique_values = sorted(values.unique().tolist())
-
     return [all_label] + unique_values
 
 
@@ -243,7 +223,8 @@ def plot_situation(
     player_map: dict,
     source_scale: str,
     selected_players: list[str],
-    clamp_outside: bool
+    clamp_outside: bool,
+    point_size: int,
 ):
     line = df.loc[row_index]
 
@@ -264,6 +245,7 @@ def plot_situation(
         player_name = get_player_name_for_label(line, label)
 
         status = "ok"
+
         if x_num is None or y_num is None:
             status = "valeur manquante / non convertible"
             debug_rows.append({
@@ -271,7 +253,7 @@ def plot_situation(
                 "Joueur réel": player_name,
                 "X brut": x_raw,
                 "Y brut": y_raw,
-                "Statut": status
+                "Statut": status,
             })
             continue
 
@@ -284,7 +266,7 @@ def plot_situation(
                 "Joueur réel": player_name,
                 "X brut": x_raw,
                 "Y brut": y_raw,
-                "Statut": status
+                "Statut": status,
             })
             continue
 
@@ -299,7 +281,7 @@ def plot_situation(
                     "Joueur réel": player_name,
                     "X brut": x_raw,
                     "Y brut": y_raw,
-                    "Statut": status
+                    "Statut": status,
                 })
                 continue
 
@@ -307,14 +289,15 @@ def plot_situation(
         ax.scatter(
             x,
             y,
-            s=200,
+            s=point_size,
             color=color,
             edgecolors="black",
             linewidths=2,
-            zorder=3
-            )
+            zorder=4,
+        )
+
         display_text = label if player_name is None else f"{label} - {player_name}"
-        ax.text(x + 1.2, y + 0.6, display_text, color="white", fontsize=10, weight="bold")
+        ax.text(x + 1.2, y + 0.6, display_text, color="white", fontsize=10, weight="bold", zorder=5)
 
         plotted.append({
             "Joueur tactique": label,
@@ -331,19 +314,128 @@ def plot_situation(
             "Joueur réel": player_name,
             "X brut": x_raw,
             "Y brut": y_raw,
-            "Statut": status
+            "Statut": status,
         })
 
     title_issue = line.get("Issue", "Sans Issue") if "Issue" in df.columns else "Sans Issue"
     title_row = line.get("Row", "Sans Situation") if "Row" in df.columns else "Sans Situation"
+
     ax.set_title(
         f"Issue : {title_issue} | Situation : {title_row} | Ligne : {row_index}",
         color="white",
         fontsize=14,
-        weight="bold"
+        weight="bold",
     )
 
     return fig, pd.DataFrame(plotted), pd.DataFrame(debug_rows)
+
+
+def overlay_average_positions(
+    ax,
+    df_avg: pd.DataFrame,
+    player_map: dict,
+    source_scale: str,
+    selected_players: list[str],
+    clamp_outside: bool,
+    point_size: int,
+):
+    """Ajoute les positions moyennes sur le graphique existant."""
+    average_rows = []
+
+    for label, (x_col, y_col) in player_map.items():
+        if selected_players and label not in selected_players:
+            continue
+
+        if x_col not in df_avg.columns or y_col not in df_avg.columns:
+            continue
+
+        x_vals = df_avg[x_col].apply(to_float).dropna()
+        y_vals = df_avg[y_col].apply(to_float).dropna()
+
+        if len(x_vals) == 0 or len(y_vals) == 0:
+            average_rows.append({
+                "Joueur tactique": label,
+                "X moyen": None,
+                "Y moyen": None,
+                "Nb points": 0,
+                "Statut": "aucune coordonnée exploitable",
+            })
+            continue
+
+        x_mean = x_vals.mean()
+        y_mean = y_vals.mean()
+
+        x, y = convert_coords(x_mean, y_mean, source_scale)
+
+        status = "ok"
+        if x is None or y is None:
+            average_rows.append({
+                "Joueur tactique": label,
+                "X moyen": None,
+                "Y moyen": None,
+                "Nb points": len(x_vals),
+                "Statut": "conversion impossible",
+            })
+            continue
+
+        if not (0 <= x <= 120 and 0 <= y <= 60):
+            if clamp_outside:
+                x, y = clamp_coords(x, y)
+                status = "hors terrain puis recalé"
+            else:
+                average_rows.append({
+                    "Joueur tactique": label,
+                    "X moyen": round(x, 2),
+                    "Y moyen": round(y, 2),
+                    "Nb points": len(x_vals),
+                    "Statut": f"hors terrain ({x:.2f}, {y:.2f})",
+                })
+                continue
+
+        color = ROLE_COLORS.get(label, "white")
+
+        # disque moyen plus large et transparent
+        ax.scatter(
+            x,
+            y,
+            s=point_size + 140,
+            color=color,
+            alpha=0.35,
+            edgecolors="white",
+            linewidths=2.5,
+            zorder=2,
+        )
+
+        # centre blanc pour repère
+        ax.scatter(
+            x,
+            y,
+            s=35,
+            color="white",
+            edgecolors="black",
+            linewidths=1,
+            zorder=6,
+        )
+
+        ax.text(
+            x + 1.2,
+            y - 1.2,
+            f"{label} moy",
+            color="white",
+            fontsize=9,
+            weight="bold",
+            zorder=6,
+        )
+
+        average_rows.append({
+            "Joueur tactique": label,
+            "X moyen": round(x, 2),
+            "Y moyen": round(y, 2),
+            "Nb points": len(x_vals),
+            "Statut": status,
+        })
+
+    return pd.DataFrame(average_rows)
 
 
 # =========================
@@ -358,7 +450,7 @@ if uploaded_file is None:
     st.info("Charge un CSV pour commencer.")
     st.stop()
 
-# Lecture du fichier (détection automatique du séparateur ; ou ,)
+# Lecture du fichier
 try:
     uploaded_file.seek(0)
     df = pd.read_csv(uploaded_file, sep=None, engine="python")
@@ -391,27 +483,41 @@ with st.sidebar:
         "Échelle des coordonnées source",
         ["100 x 100", "120 x 120", "60 x 120", "120 x 60"],
         index=0,
-        help="Choisis l'échelle d'origine des coordonnées. Elles seront converties vers un terrain 120 x 60."
+        help="Choisis l'échelle d'origine des coordonnées. Elles seront converties vers un terrain 120 x 60.",
     )
 
     clamp_outside = st.checkbox(
         "Forcer les joueurs hors terrain à apparaître sur le bord",
-        value=True
+        value=True,
     )
-    
+
     point_size = st.slider(
-    "Taille des joueurs",
-    min_value=50,
-    max_value=400,
-    value=180,
-    step=10
-)
+        "Taille des joueurs",
+        min_value=50,
+        max_value=400,
+        value=180,
+        step=10,
+    )
+
+    show_average = st.checkbox(
+        "Afficher les positions moyennes",
+        value=False,
+    )
 
     issue_options = get_select_filter_options(df, "Issue")
     selected_issue = st.selectbox("Issue", issue_options)
 
     if "Joueur" in df.columns:
-        real_player_options = ["Tous"] + sorted(df["Joueur"].dropna().astype(str).str.strip().replace("", pd.NA).dropna().unique().tolist())
+        real_player_options = ["Tous"] + sorted(
+            df["Joueur"]
+            .dropna()
+            .astype(str)
+            .str.strip()
+            .replace("", pd.NA)
+            .dropna()
+            .unique()
+            .tolist()
+        )
         selected_real_player = st.selectbox("Joueur", real_player_options)
     else:
         selected_real_player = "Tous"
@@ -438,7 +544,7 @@ with st.sidebar:
     selected_players = st.multiselect(
         "Points tactiques à afficher",
         available_players,
-        default=available_players
+        default=available_players,
     )
 
 # =========================
@@ -469,10 +575,7 @@ if selected_phase_jeu != "Toutes" and "Phase de jeu" in filtered_df.columns:
 
 if selected_rapport_numerique != "Toutes" and "Rapport numerique" in filtered_df.columns:
     filtered_df = filtered_df[
-        filtered_df["Rapport numerique"]
-        .astype(str)
-        .str.strip()
-        == selected_rapport_numerique
+        filtered_df["Rapport numerique"].astype(str).str.strip() == selected_rapport_numerique
     ].copy()
 
 if filtered_df.empty:
@@ -494,15 +597,31 @@ with col1:
         source_scale=source_scale,
         selected_players=selected_players,
         clamp_outside=clamp_outside,
+        point_size=point_size,
     )
-    
+
+    average_df = pd.DataFrame()
+
+    if show_average:
+        average_df = overlay_average_positions(
+            ax=fig.axes[0],
+            df_avg=filtered_df,
+            player_map=player_map,
+            source_scale=source_scale,
+            selected_players=selected_players,
+            clamp_outside=clamp_outside,
+            point_size=point_size,
+        )
+
     st.pyplot(fig, clear_figure=True)
 
 with col2:
     st.subheader("Résumé")
     current_line = df.loc[selected_index]
+
     st.write(f"**Ligne :** {selected_index}")
     st.write(f"**Situation :** {current_line.get('Row', 'NA')}")
+
     if "Issue" in df.columns:
         st.write(f"**Issue :** {current_line.get('Issue', 'NA')}")
     if "Joueur" in df.columns:
@@ -517,13 +636,26 @@ with col2:
         st.write(f"**Phase de jeu :** {current_line.get('Phase de jeu', 'NA')}")
     if "Rapport numerique" in df.columns:
         st.write(f"**Rapport numerique :** {current_line.get('Rapport numerique', 'NA')}")
+
+    if show_average:
+        st.write("**Mode :** Situation individuelle + positions moyennes")
+    else:
+        st.write("**Mode :** Situation individuelle")
+
     st.write(f"**Joueurs affichés :** {len(plotted_df)}")
 
-    with st.expander("Coordonnées affichées", expanded=True):
+    with st.expander("Coordonnées de la situation affichée", expanded=True):
         if plotted_df.empty:
             st.write("Aucun joueur affiché.")
         else:
             st.dataframe(plotted_df, use_container_width=True)
+
+    if show_average:
+        with st.expander("Positions moyennes superposées", expanded=True):
+            if average_df.empty:
+                st.write("Aucune moyenne affichée.")
+            else:
+                st.dataframe(average_df, use_container_width=True)
 
     with st.expander("Diagnostic complet"):
         st.dataframe(debug_df, use_container_width=True)
