@@ -147,7 +147,7 @@ def build_player_map(df: pd.DataFrame):
 ROLE_COLORS = {
     "ADV": "red",
     "DLADV": "red",
-    "BAL": "black",
+    "BAL": "white",
     "DC": "blue",
     "MDC": "blue",
     "MC": "blue",
