@@ -42,6 +42,8 @@ def normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
             renamed[col] = "Phase de jeu"
         elif col_lower == "rapport numerique":
             renamed[col] = "Rapport numerique"
+        elif col_lower == "journee":
+            renamed[col] = "Journée"
         else:
             renamed[col] = col_clean
 
@@ -440,29 +442,49 @@ def overlay_average_positions(
 # Interface
 # =========================
 st.title("Mini appli d'analyse tactique")
-st.caption("Filtres par Issue, Joueur, Situation, Choix, Choix duel, Hauteur de bloc, Phase de jeu et Rapport numerique.")
+st.caption("Filtres par Journée, Issue, Joueur, Situation, Choix, Choix duel, Hauteur de bloc, Phase de jeu et Rapport numerique.")
 
-uploaded_file = st.file_uploader("Dépose ton CSV", type=["csv"])
+uploaded_files = st.file_uploader(
+    "Dépose un ou plusieurs CSV",
+    type=["csv"],
+    accept_multiple_files=True
+)
 
-if uploaded_file is None:
-    st.info("Charge un CSV pour commencer.")
+if not uploaded_files:
+    st.info("Charge au moins un CSV pour commencer.")
     st.stop()
 
-# Lecture du fichier
-try:
-    uploaded_file.seek(0)
-    df = pd.read_csv(uploaded_file, sep=None, engine="python")
-except Exception as e:
-    uploaded_file.seek(0)
+dfs = []
+read_errors = []
+
+for uploaded_file in uploaded_files:
     try:
-        df = pd.read_csv(uploaded_file, sep=";")
-    except Exception:
+        uploaded_file.seek(0)
+        temp_df = pd.read_csv(uploaded_file, sep=None, engine="python")
+    except Exception as e:
         uploaded_file.seek(0)
         try:
-            df = pd.read_csv(uploaded_file, sep=",")
+            temp_df = pd.read_csv(uploaded_file, sep=";")
         except Exception:
-            st.error(f"Impossible de lire le fichier CSV : {e}")
-            st.stop()
+            uploaded_file.seek(0)
+            try:
+                temp_df = pd.read_csv(uploaded_file, sep=",")
+            except Exception:
+                read_errors.append(f"{uploaded_file.name} : {e}")
+                continue
+
+    temp_df["Journée"] = uploaded_file.name
+    dfs.append(temp_df)
+
+if not dfs:
+    st.error("Impossible de lire les fichiers CSV sélectionnés.")
+    if read_errors:
+        with st.expander("Détail des erreurs"):
+            for err in read_errors:
+                st.write(err)
+    st.stop()
+
+df = pd.concat(dfs, ignore_index=True)
 
 df = normalize_columns(df)
 df = ensure_row_column(df)
@@ -501,6 +523,26 @@ with st.sidebar:
         "Mode d'affichage",
         ["Situation actuelle", "Situation + moyenne", "Moyenne seule"],
         index=0,
+    )
+
+    if "Journée" in df.columns:
+        journee_options = sorted(
+            df["Journée"]
+            .dropna()
+            .astype(str)
+            .str.strip()
+            .replace("", pd.NA)
+            .dropna()
+            .unique()
+            .tolist()
+        )
+    else:
+        journee_options = []
+
+    selected_journees = st.multiselect(
+        "Journée",
+        journee_options,
+        default=journee_options,
     )
 
     issue_options = get_select_filter_options(df, "Issue")
@@ -550,6 +592,11 @@ with st.sidebar:
 # Filtrage
 # =========================
 filtered_df = df.copy()
+
+if "Journée" in filtered_df.columns and selected_journees:
+    filtered_df = filtered_df[
+        filtered_df["Journée"].astype(str).str.strip().isin(selected_journees)
+    ].copy()
 
 if selected_issue != "Toutes" and "Issue" in filtered_df.columns:
     filtered_df = filtered_df[filtered_df["Issue"].astype(str).str.strip() == selected_issue].copy()
@@ -656,6 +703,8 @@ with col2:
     st.write(f"**Ligne :** {selected_index}")
     st.write(f"**Situation :** {current_line.get('Row', 'NA')}")
 
+    if "Journée" in df.columns:
+        st.write(f"**Journée :** {current_line.get('Journée', 'NA')}")
     if "Issue" in df.columns:
         st.write(f"**Issue :** {current_line.get('Issue', 'NA')}")
     if "Joueur" in df.columns:
