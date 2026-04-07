@@ -42,6 +42,8 @@ def normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
             renamed[col] = "Phase de jeu"
         elif col_lower == "rapport numerique":
             renamed[col] = "Rapport numerique"
+        elif col_lower in ["porteur adverse", "porteur adv"]:
+            renamed[col] = "Porteur adverse"
         elif col_lower == "journee":
             renamed[col] = "Journée"
         else:
@@ -442,7 +444,7 @@ def overlay_average_positions(
 # Interface
 # =========================
 st.title("Mini appli d'analyse tactique")
-st.caption("Filtres par Journée, Issue, Joueur, Situation, Choix, Choix duel, Hauteur de bloc, Phase de jeu et Rapport numerique.")
+st.caption("Filtres par Journée, Issue, Joueur, Porteur adverse, Situation, Choix, Choix duel, Hauteur de bloc, Phase de jeu et Rapport numerique.")
 
 uploaded_files = st.file_uploader(
     "Dépose un ou plusieurs CSV",
@@ -563,6 +565,9 @@ with st.sidebar:
     else:
         selected_real_player = "Tous"
 
+    porteur_adverse_options = get_select_filter_options(df, "Porteur adverse")
+    selected_porteur_adverse = st.selectbox("Porteur adverse", porteur_adverse_options)
+
     situation_options = get_select_filter_options(df, "Situation")
     selected_situation_filter = st.selectbox("Situation", situation_options)
 
@@ -603,6 +608,11 @@ if selected_issue != "Toutes" and "Issue" in filtered_df.columns:
 
 if selected_real_player != "Tous" and "Joueur" in filtered_df.columns:
     filtered_df = filtered_df[filtered_df["Joueur"].astype(str).str.strip() == selected_real_player].copy()
+
+if selected_porteur_adverse != "Toutes" and "Porteur adverse" in filtered_df.columns:
+    filtered_df = filtered_df[
+        filtered_df["Porteur adverse"].astype(str).str.strip() == selected_porteur_adverse
+    ].copy()
 
 if selected_situation_filter != "Toutes" and "Situation" in filtered_df.columns:
     filtered_df = filtered_df[filtered_df["Situation"].astype(str).str.strip() == selected_situation_filter].copy()
@@ -709,6 +719,8 @@ with col2:
         st.write(f"**Issue :** {current_line.get('Issue', 'NA')}")
     if "Joueur" in df.columns:
         st.write(f"**Joueur :** {current_line.get('Joueur', 'NA')}")
+    if "Porteur adverse" in df.columns:
+        st.write(f"**Porteur adverse :** {current_line.get('Porteur adverse', 'NA')}")
     if "Choix" in df.columns:
         st.write(f"**Choix :** {current_line.get('Choix', 'NA')}")
     if "Choix duel" in df.columns:
